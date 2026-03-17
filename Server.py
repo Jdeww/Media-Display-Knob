@@ -18,7 +18,7 @@ async def SendData():
                         n = MediaData()
                         x = await n.get_info()
                         conn.sendall((json.dumps(x) + "\n").encode())
-                        time.sleep(1)
+                        time.sleep(100)
             except ConnectionResetError:
                 print("Client Disconnected")
 

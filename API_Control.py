@@ -37,6 +37,7 @@ class MediaData:
                     curr_time += elapsed
 
                 thumbnail_bytes = await self.get_thumbnail_bytes(info.thumbnail)
+
                 return[
                     curr_session.source_app_user_model_id,
                     info.title,
@@ -46,5 +47,12 @@ class MediaData:
                     round(curr_time, 3),
                     total_time
                 ]
-            return "No timeline found"
-        return "No session found"
+        return [
+            "nothing",
+            "--",
+            "--",
+            "--",
+            base64.b64encode(open("Default.jpg", "rb").read()).decode(),
+            0.00,
+            0.00
+        ]
