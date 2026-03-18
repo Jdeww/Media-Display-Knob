@@ -1,12 +1,11 @@
 import socket
 import asyncio
-import time
 import json
 import base64
 
 async def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((socket.gethostbyname(socket.gethostname()), 12345))
+        s.connect(('10.0.0.21', 12345))
         while(True):
             data = ""
             while(True):
