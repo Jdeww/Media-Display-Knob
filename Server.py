@@ -1,37 +1,50 @@
-import threading
 import asyncio
 import socket
 from API_Control import MediaData
-import time
 import json
 
-async def SendData():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((socket.gethostbyname(socket.gethostname()), 12345))
-        s.listen()
-        while True:
-            try:
-                conn, addr = s.accept()
-                with conn:
-                    print(f"Connected by {addr}")
-                    while True:
-                        n = MediaData()
-                        x = await n.get_info()
-                        conn.sendall((json.dumps(x) + "\n").encode())
-                        time.sleep(100)
-            except ConnectionResetError:
-                print("Client Disconnected")
-
-
-async def main():
+async def SendData(s):
+    m = [0,0,0,0,0,0,0]
     while True:
         n = MediaData()
         x = await n.get_info()
-        print(x[0:4] , x[5:])
-        with open("Thumbnail.jpg", "wb") as f:
-            f.write(x[4])
-        time.sleep(1)
+        if (x[1] != m[1]):
+            s.write((json.dumps(x) + "\n").encode())
+            m = x
+        else:
+            s.write((json.dumps(x[5:]) + "\n").encode())
+        await s.drain()
+        await asyncio.sleep(1)
+
+async def ReceiveData(s):
+    while(True):
+        data = ""
+        while(True):
+            data += (await s.read(1024)).decode()
+            if "\n" in data:
+                break
+        data = json.loads(data[:data.index("\n")])
+        print(data)
+
+async def handleClient(reader, writer):
+    addr = writer.get_extra_info('peername')
+    print(f"Connected by {addr}")
+    try:
+        await asyncio.gather(
+            SendData(writer),
+            ReceiveData(reader))
+    except ConnectionResetError:
+        print("Client Disconnected")
+
+async def main():
+    server = await asyncio.start_server(
+        handleClient,
+        socket.gethostbyname(socket.gethostname()),
+        12345
+    )
+    async with server:
+        await server.serve_forever()
 
 
 if __name__ == "__main__":
-    asyncio.run(SendData())
+    asyncio.run(main())
