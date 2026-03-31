@@ -1,13 +1,12 @@
 import asyncio
 import socket
-from API_Control import MediaData
+from APIControl import MediaData
 import json
 
-async def SendData(s):
-    m = [0,0,0,0,0,0,0]
+async def SendData(s,x):
+    m = [0,0,0,0,0,0,0,0]
     while True:
-        n = MediaData()
-        x = await n.get_info()
+        x = await x.get_info()
         if (x[1] != m[1]):
             s.write((json.dumps(x) + "\n").encode())
             m = x
@@ -16,7 +15,7 @@ async def SendData(s):
         await s.drain()
         await asyncio.sleep(1)
 
-async def ReceiveData(s):
+async def ReceiveData(s,x):
     while(True):
         data = ""
         while(True):
@@ -24,15 +23,16 @@ async def ReceiveData(s):
             if "\n" in data:
                 break
         data = json.loads(data[:data.index("\n")])
-        print(data)
+        await x.Change()
 
 async def handleClient(reader, writer):
     addr = writer.get_extra_info('peername')
+    x, s = await MediaData()
     print(f"Connected by {addr}")
     try:
         await asyncio.gather(
-            SendData(writer),
-            ReceiveData(reader))
+            SendData(writer, x),
+            ReceiveData(reader, s))
     except ConnectionResetError:
         print("Client Disconnected")
 

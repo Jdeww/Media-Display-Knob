@@ -2,6 +2,7 @@ import time
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as manager
 from winsdk.windows.storage.streams import DataReader, Buffer, InputStreamOptions
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus
+from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackControls as Controls
 import base64
 
 class MediaData:
@@ -17,8 +18,12 @@ class MediaData:
         reader.read_bytes(img_bytes)
         return bytes(img_bytes)
     
+    async def GetStatus(self):
+        if await manager.request_async().get_current_session().playback_status == PlaybackStatus.PLAYING:
+            return True
+        return False
 
-    async def get_info(self):
+    async def GetInfo(self):
         session = await manager.request_async()
         curr_session = session.get_current_session()
 
@@ -37,7 +42,7 @@ class MediaData:
                     curr_time += elapsed
 
                 thumbnail_bytes = await self.get_thumbnail_bytes(info.thumbnail)
-
+                status = await self.GetStatus()
                 return[
                     curr_session.source_app_user_model_id,
                     info.title,
@@ -45,7 +50,8 @@ class MediaData:
                     info.album_title,
                     base64.b64encode(thumbnail_bytes).decode(),
                     round(curr_time, 3),
-                    total_time
+                    total_time,
+                    status
                 ]
         return [
             "nothing",
@@ -54,5 +60,19 @@ class MediaData:
             "--",
             base64.b64encode(open("Default.jpg", "rb").read()).decode(),
             0.00,
-            0.00
+            0.00,
+            None
         ]
+    
+    async def Change(self, val):
+        if val == "1":
+            Controls.TryChangeChannelUpAsync()
+        elif val == "2":
+            Controls.TryChangeChannelDownAsync()
+        else:
+            pause = await self.GetStatus()
+            if pause == False:
+                Controls.TryPauseAsync()
+            else:
+                Controls.TryPlayAsync()
+        return
