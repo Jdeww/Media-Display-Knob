@@ -2,7 +2,6 @@ import time
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as manager
 from winsdk.windows.storage.streams import DataReader, Buffer, InputStreamOptions
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus
-from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackControls as Controls
 import base64
 
 class MediaData:
@@ -19,7 +18,8 @@ class MediaData:
         return bytes(img_bytes)
     
     async def GetStatus(self):
-        if await manager.request_async().get_current_session().playback_status == PlaybackStatus.PLAYING:
+        session = await manager.request_async()
+        if session.get_current_session().get_playback_info().playback_status == PlaybackStatus.PLAYING:
             return True
         return False
 
@@ -65,14 +65,19 @@ class MediaData:
         ]
     
     async def Change(self, val):
-        if val == "1":
-            Controls.TryChangeChannelUpAsync()
-        elif val == "2":
-            Controls.TryChangeChannelDownAsync()
-        else:
-            pause = await self.GetStatus()
-            if pause == False:
-                Controls.TryPauseAsync()
+        session = await manager.request_async()
+        curr_session = session.get_current_session()
+        if curr_session:
+            if val == 1:
+                await curr_session.try_skip_next_async()
+            elif val == 2:
+                await curr_session.try_skip_previous_async()
             else:
-                Controls.TryPlayAsync()
-        return
+                pause = await self.GetStatus()
+                await curr_session.try_toggle_play_pause_async() 
+                next = await self.GetStatus()
+                if next == pause:
+                    if not pause:
+                        await curr_session.try_pause_async()
+                    else:
+                        await curr_session.try_toggle_play_pause_async() 

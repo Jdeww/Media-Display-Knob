@@ -28,7 +28,7 @@ class Interface:
                         return 2   # counter-clockwise
 
                 prev_clk = clk
-                await asyncio.sleep(0)
+                await asyncio.sleep(0.001)
 
         except KeyboardInterrupt:
             GPIO.cleanup()
@@ -46,6 +46,6 @@ class Interface:
                 if clk != prev_clk and clk == GPIO.LOW:
                     return 3
                 prev_clk = clk
-                await asyncio.sleep(0)
+                await asyncio.sleep(0.001)
         except KeyboardInterrupt:
             GPIO.cleanup()
