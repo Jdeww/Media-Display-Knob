@@ -4,16 +4,18 @@ from APIControl import MediaData
 import json
 
 async def SendData(s,x):
-    m = [0,0,0,0,0,0,0,0]
+    m = [0,0,0,0,0,0,0,0,0]
     while True:
         data = await x.GetInfo()
-        if (data[1] != m[1]):
+        if data[1] != m[1]:
             s.write((json.dumps(data) + "\n").encode())
+            await s.drain()
             m = data
-        else:
-            s.write((json.dumps(data[5:]) + "\n").encode())
-        await s.drain()
-        await asyncio.sleep(1)
+        elif data[5:8] != m[5:8]:
+            s.write((json.dumps(data[5:8]) + "\n").encode())
+            await s.drain()
+            m = data
+        await asyncio.sleep(0.2)
 
 async def ReceiveData(s,x):
     while(True):

@@ -3,23 +3,22 @@ import asyncio
 
 class Interface:
     def __init__(self):
-        pass
+        self.CLK = 22
+        self.DT = 27
+        self.SW = 17
+
+        GPIO.cleanup()
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.CLK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(self.DT, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(self.SW, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     async def scroll(self):
-        CLK = 22
-        DT = 27
-        SW = 17
-
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(CLK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(DT, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(SW, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
         try:
-            prev_clk = GPIO.input(CLK)
+            prev_clk = GPIO.input(self.CLK)
             while True:
-                clk = GPIO.input(CLK)
-                dt = GPIO.input(DT)
+                clk = GPIO.input(self.CLK)
+                dt = GPIO.input(self.DT)
 
                 if clk != prev_clk and clk == GPIO.LOW:  # detected falling edge
                     if dt == GPIO.HIGH:
@@ -28,24 +27,20 @@ class Interface:
                         return 2   # counter-clockwise
 
                 prev_clk = clk
-                await asyncio.sleep(0.001)
+                await asyncio.sleep(0.0005)
 
         except KeyboardInterrupt:
             GPIO.cleanup()
 
     async def click(self):
-        SW = 17
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(SW, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
         try:
-            prev_clk = GPIO.input(SW)
+            prev_clk = GPIO.input(self.SW)
             while True:
-                clk = GPIO.input(SW)
+                clk = GPIO.input(self.SW)
 
                 if clk != prev_clk and clk == GPIO.LOW:
                     return 3
                 prev_clk = clk
-                await asyncio.sleep(0.001)
+                await asyncio.sleep(0.0005)
         except KeyboardInterrupt:
             GPIO.cleanup()

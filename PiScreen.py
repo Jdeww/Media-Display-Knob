@@ -1,0 +1,169 @@
+import pygame
+import sys
+import threading
+import time
+import io
+
+def _round_image(image, radius):
+    size = image.get_size()
+    mask = pygame.Surface(size, pygame.SRCALPHA)
+    mask.fill((0, 0, 0, 0))
+    pygame.draw.rect(mask, (255, 255, 255, 255), (0, 0, *size), border_radius=radius)
+    image = image.convert_alpha()
+    image.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    return image
+
+def _draw_rounded_bar(surface, bg_color, fg_color, x, y, w, h, progress):
+    r = h // 2
+    pygame.draw.rect(surface, bg_color, (x + r, y, w - 2 * r, h))
+    pygame.draw.circle(surface, bg_color, (x + r,     y + r), r)
+    pygame.draw.circle(surface, bg_color, (x + w - r, y + r), r)
+    fill_w = max(min(int(w * progress), w), 2 * r)
+    pygame.draw.rect(surface, fg_color, (x + r, y, fill_w - 2 * r, h))
+    pygame.draw.circle(surface, fg_color, (x + r,          y + r), r)
+    pygame.draw.circle(surface, fg_color, (x + fill_w - r, y + r), r)
+    dot_r = h
+    dot_cx = max(x + dot_r, min(x + fill_w, x + w - dot_r))
+    pygame.draw.circle(surface, (255, 255, 255), (dot_cx, y + r), dot_r)
+
+class Screen:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._data = None
+        self._dirty = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def update(self, title, artist, curr_time, total_time, playing, thumbnail_bytes, color):
+        with self._lock:
+            self._data = {
+                "title": title,
+                "artist": artist,
+                "curr_time": curr_time,
+                "total_time": total_time,
+                "playing": playing,
+                "thumbnail_bytes": thumbnail_bytes,
+                "color": color,
+                "updated_at": time.monotonic()
+            }
+        self._dirty.set()
+
+    def update_time(self, curr_time, total_time, playing):
+        with self._lock:
+            if self._data is not None:
+                self._data["curr_time"] = curr_time
+                self._data["total_time"] = total_time
+                self._data["playing"] = playing
+                self._data["updated_at"] = time.monotonic()
+        self._dirty.set()
+
+    def _format_time(self, seconds):
+        seconds = int(seconds)
+        return f"{seconds // 60}:{seconds % 60:02d}"
+
+    def _loop(self):
+        try:
+            pygame.init()
+            pygame.mouse.set_visible(False)
+            screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE)
+            width, height = screen.get_size()
+        except Exception as e:
+            print(f"[Screen] Display init failed: {e}")
+            return
+
+        font_title  = pygame.font.SysFont(None, 100)
+        font_artist = pygame.font.SysFont(None, 56)
+        font_small  = pygame.font.SysFont(None, 28)
+
+        thumb_size = int(height * 0.7)
+        thumb_cache = None
+        last_thumbnail_bytes = None
+
+        text_x   = width // 2
+        center_y = height // 2
+        bar_w = width // 2 - 60
+        bar_h = 10
+        bar_x = text_x + 30
+        bar_y = center_y + 80
+        thumb_x = width // 4 - thumb_size // 2
+        thumb_y = (height - thumb_size) // 2
+
+        # Marquee state
+        title_max_w = width // 2 - 40
+        title_clip = pygame.Surface((title_max_w, font_title.get_height()), pygame.SRCALPHA)
+        scroll_x = 0.0
+        scroll_speed = 45
+        scroll_gap = 80
+        last_title = None
+        title_surf = None
+        title_needs_scroll = False
+
+        clock = pygame.time.Clock()
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN or event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            # Single frame timer — no dirty.wait here to avoid double-sleep
+            dt = clock.tick(30) / 1000.0
+
+            with self._lock:
+                data = self._data
+
+            if data is None:
+                continue
+
+            try:
+                if data["thumbnail_bytes"] is not last_thumbnail_bytes:
+                    last_thumbnail_bytes = data["thumbnail_bytes"]
+                    thumb_cache = _round_image(
+                        pygame.transform.smoothscale(
+                            pygame.image.load(io.BytesIO(last_thumbnail_bytes)),
+                            (thumb_size, thumb_size)
+                        ),
+                        radius=12
+                    )
+
+                if data["title"] != last_title:
+                    last_title = data["title"]
+                    title_surf = font_title.render(data["title"], True, (255, 255, 255))
+                    title_needs_scroll = title_surf.get_width() > title_max_w
+                    scroll_x = 0.0
+
+                if title_needs_scroll:
+                    loop_w = title_surf.get_width() + scroll_gap
+                    scroll_x = (scroll_x + scroll_speed * dt) % loop_w
+
+                elapsed = time.monotonic() - data["updated_at"]
+                curr_time = data["curr_time"] + (elapsed if data["playing"] else 0)
+                curr_time = min(curr_time, data["total_time"])
+
+                bg = tuple(data.get("color", [0, 0, 0]))
+                screen.fill(bg)
+                screen.blit(thumb_cache, (thumb_x, thumb_y))
+
+                # Title — pre-allocated clip surface, reused every frame
+                title_clip.fill((0, 0, 0, 0))
+                if title_needs_scroll:
+                    loop_w = title_surf.get_width() + scroll_gap
+                    title_clip.blit(title_surf, (-int(scroll_x), 0))
+                    title_clip.blit(title_surf, (loop_w - int(scroll_x), 0))
+                else:
+                    title_clip.blit(title_surf, (0, 0))
+                screen.blit(title_clip, (text_x + 20, center_y - 50))
+
+                screen.blit(font_artist.render(data["artist"], True, (232, 232, 232)),
+                            (text_x + 25, center_y + 21))
+                screen.blit(font_small.render(
+                    f"{self._format_time(curr_time)} / {self._format_time(data['total_time'])}",
+                    True, (150, 150, 150)
+                ), (text_x + 20, center_y + 110))
+
+                progress = (curr_time / data["total_time"]) if data["total_time"] > 0 else 0
+                _draw_rounded_bar(screen, (60, 60, 60), (255, 255, 255), bar_x, bar_y, bar_w, bar_h, progress)
+
+                pygame.display.flip()
+            except Exception as e:
+                print(f"[Screen] Error: {e}")

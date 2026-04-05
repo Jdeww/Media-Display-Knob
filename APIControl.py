@@ -3,6 +3,7 @@ from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessi
 from winsdk.windows.storage.streams import DataReader, Buffer, InputStreamOptions
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus
 import base64
+from vibrant import Vibrant
 
 class MediaData:
     def __init__(self):
@@ -42,6 +43,11 @@ class MediaData:
                     curr_time += elapsed
 
                 thumbnail_bytes = await self.get_thumbnail_bytes(info.thumbnail)
+                with open("Thumbnail.jpg", "wb") as f:
+                    f.write(thumbnail_bytes)
+                palette = Vibrant().get_palette("Thumbnail.jpg")
+                dark_muted = palette.dark_muted
+                color = list(dark_muted.rgb) if dark_muted else [0, 0, 0]
                 status = await self.GetStatus()
                 return[
                     curr_session.source_app_user_model_id,
@@ -51,7 +57,8 @@ class MediaData:
                     base64.b64encode(thumbnail_bytes).decode(),
                     round(curr_time, 3),
                     total_time,
-                    status
+                    status,
+                    color
                 ]
         return [
             "nothing",
@@ -61,7 +68,8 @@ class MediaData:
             base64.b64encode(open("Default.jpg", "rb").read()).decode(),
             0.00,
             0.00,
-            None
+            None,
+            [0, 0, 0]
         ]
     
     async def Change(self, val):

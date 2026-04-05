@@ -2,8 +2,9 @@ import asyncio
 import json
 import base64
 from PiInterface import Interface
+from PiScreen import Screen
 
-async def read(x):
+async def read(x, screen):
     while(True):
         data = ""
         while(True):
@@ -11,13 +12,14 @@ async def read(x):
             if "\n" in data:
                 break
         data = json.loads(data[:data.index("\n")])
-        if len(data) == 8:
+        if len(data) == 9:
             print(data[0:4], data[5:])
+            thumbnail_bytes = base64.b64decode(data[4])
             with open("Thumbnail.jpg", "wb") as f:
-                picture = base64.b64decode(data[4])
-                f.write(picture)
-        else:
-            print(data)
+                f.write(thumbnail_bytes)
+            screen.update(data[1], data[2], data[5], data[6], data[7], thumbnail_bytes, data[8])
+        elif len(data) == 3:
+            screen.update_time(data[0], data[1], data[2])
 
 async def write(x):
     n = Interface()
@@ -25,7 +27,7 @@ async def write(x):
     click_task = asyncio.create_task(n.click())
     while True:
         try:
-            done, pending = await asyncio.wait(
+            done, _ = await asyncio.wait(
                 {scroll_task, click_task},
                 return_when=asyncio.FIRST_COMPLETED
             )
@@ -44,9 +46,10 @@ async def write(x):
             print("Server Disconnected")
 
 async def main():
+    s = Screen()
     reader, writer = await asyncio.open_connection('10.0.0.21', 12345)
     await asyncio.gather(
-        read(reader),
+        read(reader, s),
         write(writer)
     )
 
