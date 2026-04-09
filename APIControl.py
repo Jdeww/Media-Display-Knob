@@ -42,7 +42,10 @@ class MediaData:
                     elapsed = now - last_update_unix
                     curr_time += elapsed
 
-                thumbnail_bytes = await self.get_thumbnail_bytes(info.thumbnail)
+                if info.thumbnail:
+                    thumbnail_bytes = await self.get_thumbnail_bytes(info.thumbnail)
+                else:
+                    thumbnail_bytes = open("Default.jpg", "rb").read()
                 with open("Thumbnail.jpg", "wb") as f:
                     f.write(thumbnail_bytes)
                 palette = Vibrant().get_palette("Thumbnail.jpg")

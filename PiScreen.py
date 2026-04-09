@@ -3,6 +3,10 @@ import sys
 import threading
 import time
 import io
+import os
+
+def _load_unicode_font(size):
+    return pygame.font.Font("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", size)
 
 def _round_image(image, radius):
     size = image.get_size()
@@ -71,8 +75,8 @@ class Screen:
             print(f"[Screen] Display init failed: {e}")
             return
 
-        font_title  = pygame.font.SysFont(None, 100)
-        font_artist = pygame.font.SysFont(None, 56)
+        font_title  = _load_unicode_font(75)
+        font_artist = _load_unicode_font(38)
         font_small  = pygame.font.SysFont(None, 28)
 
         thumb_size = int(height * 0.7)
@@ -97,6 +101,18 @@ class Screen:
         last_title = None
         title_surf = None
         title_needs_scroll = False
+
+        artist_max_w = width // 2 - 40
+        artist_clip = pygame.Surface((artist_max_w, font_artist.get_height()), pygame.SRCALPHA)
+        artist_scroll_x = 0.0
+        last_artist = None
+        artist_surf = None
+        artist_needs_scroll = False
+
+        # Background color fade state
+        bg_current = (0.0, 0.0, 0.0)
+        bg_target  = (0.0, 0.0, 0.0)
+        fade_speed = 3.0  # units per second (0–255 scale)
 
         clock = pygame.time.Clock()
 
@@ -136,12 +152,26 @@ class Screen:
                     loop_w = title_surf.get_width() + scroll_gap
                     scroll_x = (scroll_x + scroll_speed * dt) % loop_w
 
+                if data["artist"] != last_artist:
+                    last_artist = data["artist"]
+                    artist_surf = font_artist.render(data["artist"], True, (232, 232, 232))
+                    artist_needs_scroll = artist_surf.get_width() > artist_max_w
+                    artist_scroll_x = 0.0
+
+                if artist_needs_scroll:
+                    artist_loop_w = artist_surf.get_width() + scroll_gap
+                    artist_scroll_x = (artist_scroll_x + scroll_speed * dt) % artist_loop_w
+
                 elapsed = time.monotonic() - data["updated_at"]
                 curr_time = data["curr_time"] + (elapsed if data["playing"] else 0)
                 curr_time = min(curr_time, data["total_time"])
 
-                bg = tuple(data.get("color", [0, 0, 0]))
-                screen.fill(bg)
+                bg_target = tuple(float(c) for c in data.get("color", [0, 0, 0]))
+                bg_current = tuple(
+                    min(max(c + (t - c) * min(fade_speed * dt, 1.0), 0.0), 255.0)
+                    for c, t in zip(bg_current, bg_target)
+                )
+                screen.fill(tuple(int(c) for c in bg_current))
                 screen.blit(thumb_cache, (thumb_x, thumb_y))
 
                 # Title — pre-allocated clip surface, reused every frame
@@ -152,14 +182,20 @@ class Screen:
                     title_clip.blit(title_surf, (loop_w - int(scroll_x), 0))
                 else:
                     title_clip.blit(title_surf, (0, 0))
-                screen.blit(title_clip, (text_x + 20, center_y - 50))
+                screen.blit(title_clip, (text_x + 20, center_y - 84))
 
-                screen.blit(font_artist.render(data["artist"], True, (232, 232, 232)),
-                            (text_x + 25, center_y + 21))
+                artist_clip.fill((0, 0, 0, 0))
+                if artist_needs_scroll:
+                    artist_loop_w = artist_surf.get_width() + scroll_gap
+                    artist_clip.blit(artist_surf, (-int(artist_scroll_x), 0))
+                    artist_clip.blit(artist_surf, (artist_loop_w - int(artist_scroll_x), 0))
+                else:
+                    artist_clip.blit(artist_surf, (0, 0))
+                screen.blit(artist_clip, (text_x + 25, center_y + 6))
                 screen.blit(font_small.render(
                     f"{self._format_time(curr_time)} / {self._format_time(data['total_time'])}",
                     True, (150, 150, 150)
-                ), (text_x + 20, center_y + 110))
+                ), (text_x + 30, center_y + 100))
 
                 progress = (curr_time / data["total_time"]) if data["total_time"] > 0 else 0
                 _draw_rounded_bar(screen, (60, 60, 60), (255, 255, 255), bar_x, bar_y, bar_w, bar_h, progress)
