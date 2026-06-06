@@ -67,7 +67,9 @@ class Screen:
 
     def _loop(self):
         try:
+            pygame.mixer.pre_init(0, 0, 0, 0)
             pygame.init()
+            pygame.mixer.quit()
             pygame.mouse.set_visible(False)
             screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE)
             width, height = screen.get_size()

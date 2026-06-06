@@ -14,9 +14,12 @@ async def read(x, screen):
         data = json.loads(data[:data.index("\n")])
         if len(data) == 9:
             print(data[0:4], data[5:])
-            thumbnail_bytes = base64.b64decode(data[4])
-            with open("Thumbnail.jpg", "wb") as f:
-                f.write(thumbnail_bytes)
+            if str(data[0]).startswith("Spotify"):
+                thumbnail_bytes = base64.b64decode(data[4])
+                with open("Thumbnail.jpg", "wb") as f:
+                    f.write(thumbnail_bytes)
+            else:
+                thumbnail_bytes = open("Default.jpg", "rb").read()
             screen.update(data[1], data[2], data[5], data[6], data[7], thumbnail_bytes, data[8])
         elif len(data) == 3:
             screen.update_time(data[0], data[1], data[2])
@@ -47,11 +50,17 @@ async def write(x):
 
 async def main():
     s = Screen()
-    reader, writer = await asyncio.open_connection('10.0.0.21', 12345)
-    await asyncio.gather(
-        read(reader, s),
-        write(writer)
-    )
+    while True:
+        try:
+            reader, writer = await asyncio.open_connection('10.0.0.21', 12345)
+            print("Connected")
+            await asyncio.gather(
+                read(reader, s),
+                write(writer)
+            )
+        except (OSError, ConnectionResetError, ConnectionAbortedError) as e:
+            print(f"Connection failed: {e}, retrying in 5s...")
+            await asyncio.sleep(5)
 
 if __name__ == "__main__":
     asyncio.run(main())

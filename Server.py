@@ -1,5 +1,4 @@
 import asyncio
-import socket
 from APIControl import MediaData
 import json
 
@@ -35,13 +34,13 @@ async def handleClient(reader, writer):
         await asyncio.gather(
             SendData(writer, x),
             ReceiveData(reader, x))
-    except ConnectionResetError:
+    except (ConnectionResetError, ConnectionAbortedError, OSError):
         print("Client Disconnected")
 
 async def main():
     server = await asyncio.start_server(
         handleClient,
-        socket.gethostbyname(socket.gethostname()),
+        '0.0.0.0',
         12345
     )
     async with server:
