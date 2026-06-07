@@ -20,7 +20,8 @@ class MediaData:
     
     async def GetStatus(self):
         session = await manager.request_async()
-        if session.get_current_session().get_playback_info().playback_status == PlaybackStatus.PLAYING:
+        curr_session = session.get_current_session()
+        if curr_session and curr_session.get_playback_info().playback_status == PlaybackStatus.PLAYING:
             return True
         return False
 
@@ -35,9 +36,9 @@ class MediaData:
                 curr_time = time_session.position.total_seconds()
                 total_time = time_session.end_time.total_seconds()
                 last_update = time_session.last_updated_time
-                if curr_session.get_playback_info().playback_status == PlaybackStatus.PLAYING:
+                status = curr_session.get_playback_info().playback_status == PlaybackStatus.PLAYING
+                if status:
                     now = time.time()
-
                     last_update_unix = last_update.timestamp()
                     elapsed = now - last_update_unix
                     curr_time += elapsed
@@ -51,7 +52,6 @@ class MediaData:
                 palette = Vibrant().get_palette("Thumbnail.jpg")
                 dark_muted = palette.dark_muted
                 color = list(dark_muted.rgb) if dark_muted else [0, 0, 0]
-                status = await self.GetStatus()
                 return[
                     curr_session.source_app_user_model_id,
                     info.title,
