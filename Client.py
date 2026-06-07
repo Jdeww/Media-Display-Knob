@@ -8,11 +8,13 @@ async def read(x, screen):
     while(True):
         data = ""
         while(True):
-            data += (await x.read(4096)).decode()
+            data += (await asyncio.wait_for(x.read(4096), timeout=5.0)).decode()
             if "\n" in data:
                 break
         data = json.loads(data[:data.index("\n")])
-        if len(data) == 9:
+        if len(data) == 1 and data[0] == "idle":
+            screen.set_idle()
+        elif len(data) == 9:
             print(data[0:4], data[5:])
             if str(data[0]).startswith("Spotify"):
                 thumbnail_bytes = base64.b64decode(data[4])
@@ -58,8 +60,9 @@ async def main():
                 read(reader, s),
                 write(writer)
             )
-        except (OSError, ConnectionResetError, ConnectionAbortedError) as e:
+        except (OSError, ConnectionResetError, ConnectionAbortedError, asyncio.TimeoutError) as e:
             print(f"Connection failed: {e}, retrying in 5s...")
+            s.reset()
             await asyncio.sleep(5)
 
 if __name__ == "__main__":

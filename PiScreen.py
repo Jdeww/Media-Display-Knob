@@ -34,12 +34,14 @@ class Screen:
     def __init__(self):
         self._lock = threading.Lock()
         self._data = None
+        self._state = "connecting"  # "connecting" | "idle" | "playing"
         self._dirty = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
     def update(self, title, artist, curr_time, total_time, playing, thumbnail_bytes, color):
         with self._lock:
+            self._state = "playing"
             self._data = {
                 "title": title,
                 "artist": artist,
@@ -51,6 +53,16 @@ class Screen:
                 "updated_at": time.monotonic()
             }
         self._dirty.set()
+
+    def set_idle(self):
+        with self._lock:
+            self._state = "idle"
+            self._data = None
+
+    def reset(self):
+        with self._lock:
+            self._state = "connecting"
+            self._data = None
 
     def update_time(self, curr_time, total_time, playing):
         with self._lock:
@@ -85,6 +97,16 @@ class Screen:
         thumb_cache = None
         last_thumbnail_bytes = None
 
+        try:
+            idle_surf = _round_image(
+                pygame.transform.smoothscale(pygame.image.load("Default.jpg"), (thumb_size, thumb_size)),
+                radius=12
+            )
+        except Exception:
+            idle_surf = None
+        idle_x = width // 2 - thumb_size // 2
+        idle_y = height // 2 - thumb_size // 2
+
         text_x   = width // 2
         center_y = height // 2
         bar_w = width // 2 - 60
@@ -116,6 +138,10 @@ class Screen:
         bg_target  = (0.0, 0.0, 0.0)
         fade_speed = 3.0  # units per second (0–255 scale)
 
+        font_waiting = pygame.font.SysFont(None, 48)
+        dot_count = 0
+        dot_timer = 0.0
+
         clock = pygame.time.Clock()
 
         while True:
@@ -129,8 +155,25 @@ class Screen:
 
             with self._lock:
                 data = self._data
+                state = self._state
 
-            if data is None:
+            if state == "connecting":
+                dot_timer += dt
+                if dot_timer >= 0.5:
+                    dot_timer = 0.0
+                    dot_count = (dot_count + 1) % 4
+                screen.fill((0, 0, 0))
+                label = "Connecting" + "." * dot_count
+                surf = font_waiting.render(label, True, (180, 180, 180))
+                screen.blit(surf, (width // 2 - surf.get_width() // 2, height // 2 - surf.get_height() // 2))
+                pygame.display.flip()
+                continue
+
+            if state == "idle":
+                screen.fill((0, 0, 0))
+                if idle_surf:
+                    screen.blit(idle_surf, (idle_x, idle_y))
+                pygame.display.flip()
                 continue
 
             try:

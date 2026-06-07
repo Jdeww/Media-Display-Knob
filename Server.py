@@ -6,7 +6,12 @@ async def SendData(s,x):
     m = [0,0,0,0,0,0,0,0,0]
     while True:
         data = await x.GetInfo()
-        if data[1] != m[1]:
+        if data[0] == "nothing":
+            if m[0] != "nothing":
+                s.write((json.dumps(["idle"]) + "\n").encode())
+                await s.drain()
+                m = data
+        elif data[1] != m[1]:
             s.write((json.dumps(data) + "\n").encode())
             await s.drain()
             m = data
