@@ -8,7 +8,10 @@ async def read(x, screen):
     while(True):
         data = ""
         while(True):
-            data += (await asyncio.wait_for(x.read(4096), timeout=5.0)).decode()
+            chunk = await asyncio.wait_for(x.read(4096), timeout=5.0)
+            if not chunk:
+                raise ConnectionResetError("Server closed connection")
+            data += chunk.decode()
             if "\n" in data:
                 break
         data = json.loads(data[:data.index("\n")])
