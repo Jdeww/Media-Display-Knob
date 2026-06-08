@@ -153,11 +153,11 @@ class Screen:
                     pygame.quit()
                     sys.exit()
 
-            dt = clock.tick(30) / 1000.0
-
             with self._lock:
                 data  = self._data
                 state = self._state
+
+            dt = clock.tick(30 if state == "playing" else 5) / 1000.0
 
             if state == "connecting":
                 dot_timer += dt

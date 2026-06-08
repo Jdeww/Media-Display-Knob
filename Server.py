@@ -28,7 +28,7 @@ async def SendData(s,x):
             await s.drain()
             m = data
             last_send = now
-        print(m[0:4],m[5:])
+        # print(m[0:4],m[5:])
         await asyncio.sleep(0.2)
 
 async def ReceiveData(s,x):

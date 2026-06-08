@@ -34,7 +34,7 @@ class Interface:
                 self._loop.call_soon_threadsafe(self._click_q.put_nowait, 3)
             prev_clk = clk
             prev_sw  = sw
-            time.sleep(0.001)
+            time.sleep(0.005)
 
     def close(self):
         self._stop.set()
