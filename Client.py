@@ -22,12 +22,10 @@ async def read(reader, screen):
         elif len(data) == 3:
             screen.update_time(data[0], data[1], data[2])
 
-async def write(writer):
-    n = None
+async def write(writer, n):
+    scroll_task = asyncio.create_task(n.scroll())
+    click_task  = asyncio.create_task(n.click())
     try:
-        n = Interface()
-        scroll_task = asyncio.create_task(n.scroll())
-        click_task  = asyncio.create_task(n.click())
         while True:
             done, _ = await asyncio.wait(
                 {scroll_task, click_task},
@@ -42,20 +40,32 @@ async def write(writer):
                 else:
                     click_task = asyncio.create_task(n.click())
     finally:
-        if n:
-            n.close()
+        scroll_task.cancel()
+        click_task.cancel()
 
 async def main():
     s = Screen()
-    while True:
-        try:
-            reader, writer = await asyncio.open_connection('10.0.0.21', 12345)
-            print("Connected")
-            await asyncio.gather(read(reader, s), write(writer))
-        except Exception as e:
-            print(f"Connection failed: {e}, retrying in 5s...")
-            s.reset()
+    n = Interface()
+    try:
+        while True:
+            writer = None
+            try:
+                reader, writer = await asyncio.open_connection('10.0.0.21', 12345, limit=4*1024*1024)
+                print("Connected")
+                await asyncio.gather(read(reader, s), write(writer, n))
+            except Exception as e:
+                print(f"Connection failed: {e}, retrying in 5s...")
+                s.reset()
+            finally:
+                if writer:
+                    try:
+                        writer.close()
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
             await asyncio.sleep(5)
+    finally:
+        n.close()
 
 if __name__ == "__main__":
     asyncio.run(main())

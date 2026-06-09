@@ -32,10 +32,13 @@ async def SendData(s,x):
         await asyncio.sleep(0.2)
 
 async def ReceiveData(s,x):
-    while(True):
+    while True:
         data = ""
-        while(True):
-            data += (await s.read(1024)).decode()
+        while True:
+            chunk = await s.read(1024)
+            if not chunk:
+                raise ConnectionResetError("Client disconnected")
+            data += chunk.decode()
             if "\n" in data:
                 break
         data = json.loads(data[:data.index("\n")])

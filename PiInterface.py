@@ -1,4 +1,4 @@
-import lgpio
+import lgpio # type: ignore
 import asyncio
 import threading
 import time
@@ -9,10 +9,17 @@ class Interface:
         self._DT  = 27
         self._SW  = 17
 
-        self._chip = lgpio.gpiochip_open(0)
-        lgpio.gpio_claim_input(self._chip, self._CLK, lgpio.SET_PULL_UP)
-        lgpio.gpio_claim_input(self._chip, self._DT,  lgpio.SET_PULL_UP)
-        lgpio.gpio_claim_input(self._chip, self._SW,  lgpio.SET_PULL_UP)
+        for attempt in range(10):
+            try:
+                self._chip = lgpio.gpiochip_open(0)
+                lgpio.gpio_claim_input(self._chip, self._CLK, lgpio.SET_PULL_UP)
+                lgpio.gpio_claim_input(self._chip, self._DT,  lgpio.SET_PULL_UP)
+                lgpio.gpio_claim_input(self._chip, self._SW,  lgpio.SET_PULL_UP)
+                break
+            except Exception:
+                if attempt == 9:
+                    raise
+                time.sleep(0.5)
 
         self._scroll_q = asyncio.Queue()
         self._click_q  = asyncio.Queue()
