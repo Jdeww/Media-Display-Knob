@@ -23,8 +23,9 @@ async def read(reader, screen):
             screen.update_time(data[0], data[1], data[2])
 
 async def write(writer):
-    n = Interface()
+    n = None
     try:
+        n = Interface()
         scroll_task = asyncio.create_task(n.scroll())
         click_task  = asyncio.create_task(n.click())
         while True:
@@ -41,7 +42,8 @@ async def write(writer):
                 else:
                     click_task = asyncio.create_task(n.click())
     finally:
-        n.close()
+        if n:
+            n.close()
 
 async def main():
     s = Screen()
@@ -50,7 +52,7 @@ async def main():
             reader, writer = await asyncio.open_connection('10.0.0.21', 12345)
             print("Connected")
             await asyncio.gather(read(reader, s), write(writer))
-        except (OSError, ConnectionResetError, ConnectionAbortedError, asyncio.TimeoutError) as e:
+        except Exception as e:
             print(f"Connection failed: {e}, retrying in 5s...")
             s.reset()
             await asyncio.sleep(5)

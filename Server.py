@@ -51,6 +51,12 @@ async def handleClient(reader, writer):
             ReceiveData(reader, x))
     except Exception as e:
         print(f"Client Disconnected: {e}")
+    finally:
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
 
 async def main():
     server = await asyncio.start_server(
