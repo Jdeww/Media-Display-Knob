@@ -49,14 +49,27 @@ async def main():
     try:
         while True:
             writer = None
+            read_task = None
+            write_task = None
             try:
                 reader, writer = await asyncio.open_connection('10.0.0.21', 12345, limit=4*1024*1024)
                 print("Connected")
-                await asyncio.gather(read(reader, s), write(writer, n))
+                read_task = asyncio.create_task(read(reader, s))
+                write_task = asyncio.create_task(write(writer, n))
+                done, _ = await asyncio.wait({read_task, write_task}, return_when=asyncio.FIRST_EXCEPTION)
+                for t in done:
+                    if not t.cancelled() and t.exception():
+                        raise t.exception()
             except Exception as e:
                 print(f"Connection failed: {e}, retrying in 5s...")
                 s.reset()
             finally:
+                if read_task:
+                    read_task.cancel()
+                if write_task:
+                    write_task.cancel()
+                if read_task or write_task:
+                    await asyncio.gather(read_task, write_task, return_exceptions=True)
                 if writer:
                     try:
                         writer.close()

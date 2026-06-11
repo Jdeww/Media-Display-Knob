@@ -1,0 +1,5 @@
+pillow==10.4.0
+vibrant-python==0.1.6
+winrt-runtime==3.2.1
+winrt-Windows.Media.Control==3.2.1
+winsdk==1.0.0b10

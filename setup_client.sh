@@ -18,7 +18,7 @@ Wants=network-online.target
 
 [Service]
 ExecStartPre=/bin/sleep 5
-ExecStart=/usr/bin/python3 $CLIENT_DIR/Client.py
+ExecStart=/usr/bin/python3 -u $CLIENT_DIR/Client.py
 WorkingDirectory=$CLIENT_DIR
 Restart=always
 RestartSec=5

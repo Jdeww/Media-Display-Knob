@@ -32,7 +32,7 @@ class MediaData:
         if curr_session:
             info = await curr_session.try_get_media_properties_async()
             time_session = curr_session.get_timeline_properties()
-            if time:
+            if time_session:
                 curr_time = time_session.position.total_seconds()
                 total_time = time_session.end_time.total_seconds()
                 last_update = time_session.last_updated_time
