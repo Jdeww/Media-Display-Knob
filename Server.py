@@ -7,7 +7,7 @@ async def SendData(s, x):
     last_send = 0
     while True:
         try:
-            data = await x.GetInfo()
+            data = await asyncio.wait_for(x.GetInfo(), timeout=4.0)
         except asyncio.CancelledError:
             raise
         except Exception as e:
