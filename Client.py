@@ -52,7 +52,7 @@ async def main():
             read_task = None
             write_task = None
             try:
-                reader, writer = await asyncio.open_connection('10.0.0.21', 12345, limit=4*1024*1024)
+                reader, writer = await asyncio.open_connection('Jdew.local', 12345, limit=4*1024*1024)
                 print("Connected")
                 read_task = asyncio.create_task(read(reader, s))
                 write_task = asyncio.create_task(write(writer, n))
