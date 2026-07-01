@@ -5,6 +5,7 @@ import json
 async def SendData(s, x):
     m = [0,0,0,0,0,0,0,0,0]
     last_send = 0
+    errors = 0
     while True:
         try:
             data = await asyncio.wait_for(x.GetInfo(), timeout=4.0)
@@ -15,7 +16,14 @@ async def SendData(s, x):
             if task and task.cancelling():
                 raise asyncio.CancelledError() from e
             print(f"[GetInfo] Error: {e}")
-            now = asyncio.get_event_loop().time()
+            errors += 1
+            if errors >= 3:
+                try:
+                    await x.initialize()
+                    errors = 0
+                except Exception:
+                    pass
+            now = asyncio.get_running_loop().time()
             if now - last_send >= 3.0:
                 try:
                     s.write((json.dumps(["idle"]) + "\n").encode())
@@ -23,14 +31,16 @@ async def SendData(s, x):
                     last_send = now
                 except Exception:
                     pass
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(min(0.5 * errors, 5.0))
             continue
-        now = asyncio.get_event_loop().time()
+        errors = 0
+        now = asyncio.get_running_loop().time()
         if data[0] == "nothing":
             s.write((json.dumps(["idle"]) + "\n").encode())
             await s.drain()
             m = data
             last_send = now
+            await asyncio.sleep(0.8)
         elif data[1] != m[1]:
             s.write((json.dumps(data) + "\n").encode())
             await s.drain()
@@ -51,14 +61,20 @@ async def ReceiveData(s, x):
             if not chunk:
                 raise ConnectionResetError("Client disconnected")
             data += chunk.decode()
+            if len(data) > 4096:
+                raise ValueError("Receive buffer overflow")
             if "\n" in data:
                 break
-        data = json.loads(data[:data.index("\n")])
+        try:
+            data = json.loads(data[:data.index("\n")])
+        except json.JSONDecodeError:
+            continue
         await x.Change(data)
 
 async def handleClient(reader, writer):
     addr = writer.get_extra_info('peername')
     x = MediaData()
+    await x.initialize()
     print(f"Connected by {addr}")
     send_task = asyncio.create_task(SendData(writer, x))
     recv_task = asyncio.create_task(ReceiveData(reader, x))
@@ -80,7 +96,7 @@ async def handleClient(reader, writer):
             pass
 
 async def main():
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     def _exception_handler(loop, context):
         msg = context.get('message', '')
         if 'Future.set_exception' in msg or 'Future.set_result' in msg:
