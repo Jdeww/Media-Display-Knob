@@ -1,4 +1,5 @@
 import time
+from collections import deque
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as manager
 from winsdk.windows.storage.streams import DataReader, Buffer, InputStreamOptions
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus
@@ -13,11 +14,18 @@ class MediaData:
         self._thumbnail = None
         self._background_color = None
         self._default = None
+        self._curr_session = None
+        self._log = deque(maxlen=300)
         with open("Default.jpg", "rb") as f:
             self._default = f.read()
         pallete = Vibrant().get_palette("Default.jpg")
         dark_muted = pallete.dark_muted
         self._default_color = list(dark_muted.rgb) if dark_muted else [0, 0, 0]
+
+    def _write_log(self, origin, title, album_title, artist, curr_time, total_time, status):
+        self._log.append(f"{origin} | {title} | {album_title} | {artist} | {curr_time} | {total_time} | {status}")
+        with open("media_log.txt", "w") as f:
+            f.write("\n".join(self._log))
 
     async def initialize(self):
         #Initialize a "session", used for looking up data about media being played
@@ -33,13 +41,34 @@ class MediaData:
         return bytes(img_bytes)
     
     async def GetStatus(self):
-        curr_session = self._session.get_current_session()
+        curr_session = self._curr_session
         if curr_session and curr_session.get_playback_info().playback_status == PlaybackStatus.PLAYING:
             return True
         return False
 
     async def GetInfo(self):
-        curr_session = self._session.get_current_session()
+        curr_session = None
+        if self._curr_session == None or self._curr_session.get_playback_info().playback_status != PlaybackStatus.PLAYING:
+            sessions = self._session.get_sessions()
+            for s in sessions:
+                if s.get_playback_info().playback_status == PlaybackStatus.PLAYING:
+                    info = await s.try_get_media_properties_async()
+                    if info.title:
+                        self._curr_session = s
+                        curr_session = s
+                        break
+            
+            if not self._curr_session or self._curr_session .get_playback_info().playback_status != PlaybackStatus.PLAYING:
+                for s in sessions:
+                    if s.get_playback_info().playback_status == PlaybackStatus.PAUSED:
+                        info = await s.try_get_media_properties_async()
+                        if info.title:
+                            self._curr_session = s
+                            curr_session = s
+                            break
+        else:
+            curr_session = self._curr_session
+
         if curr_session:
             #info keeps important data of media playing (title, album title, artist, thumbnail, etc)
             info = await curr_session.try_get_media_properties_async()
@@ -75,6 +104,11 @@ class MediaData:
                         self._artist = info.album_artist
                         self._background_color = color
                         self._thumbnail = thumbnail_bytes
+                        #self._write_log(curr_session.source_app_user_model_id, info.title, info.album_title, info.album_artist, round(curr_time, 3), total_time, status)
+                        
+                        
+                        #Used only when debugging, not really much of a use in day to day
+                        
                         
                         return[
                                 curr_session.source_app_user_model_id,
@@ -90,6 +124,12 @@ class MediaData:
                     #Check if the media has a thumbnail and if it does, get the raw bytes of the thumbnail
                     #With the dark muted color for the background
                 else:
+                    #self._write_log(curr_session.source_app_user_model_id, self._title, self._album_title, self._artist, round(curr_time, 3), total_time, status)
+                                            
+                        
+                    #Used only when debugging, not really much of a use in day to day
+                        
+                        
                     return[
                         curr_session.source_app_user_model_id,
                         self._title,
@@ -102,6 +142,7 @@ class MediaData:
                         self._background_color
                     ]
 
+        self._write_log("--", "--", "--", "--", 0.00, 0.00, None)
         return [
             "nothing",
             "--",
@@ -115,18 +156,18 @@ class MediaData:
         ]
     
     async def Change(self, val):
-        curr_session = self._session.get_current_session()
+        curr_session = self._curr_session
         if curr_session:
             if val == 1:
                 await curr_session.try_skip_next_async()
             elif val == 2:
                 await curr_session.try_skip_previous_async()
             else:
-                pause = await self.GetStatus()
+                status = await self.GetStatus()
                 await curr_session.try_toggle_play_pause_async() 
                 next = await self.GetStatus()
-                if next == pause:
-                    if not pause:
+                if next == status:
+                    if not status:
                         await curr_session.try_pause_async()
                     else:
                         await curr_session.try_toggle_play_pause_async() 
