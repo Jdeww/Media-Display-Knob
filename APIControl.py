@@ -57,15 +57,7 @@ class MediaData:
                         self._curr_session = s
                         curr_session = s
                         break
-            
-            if not self._curr_session or self._curr_session .get_playback_info().playback_status != PlaybackStatus.PLAYING:
-                for s in sessions:
-                    if s.get_playback_info().playback_status == PlaybackStatus.PAUSED:
-                        info = await s.try_get_media_properties_async()
-                        if info.title:
-                            self._curr_session = s
-                            curr_session = s
-                            break
+            curr_session = self._curr_session
         else:
             curr_session = self._curr_session
 
@@ -104,6 +96,8 @@ class MediaData:
                         self._artist = info.album_artist
                         self._background_color = color
                         self._thumbnail = thumbnail_bytes
+                        
+                        
                         #self._write_log(curr_session.source_app_user_model_id, info.title, info.album_title, info.album_artist, round(curr_time, 3), total_time, status)
                         
                         
@@ -124,6 +118,8 @@ class MediaData:
                     #Check if the media has a thumbnail and if it does, get the raw bytes of the thumbnail
                     #With the dark muted color for the background
                 else:
+
+
                     #self._write_log(curr_session.source_app_user_model_id, self._title, self._album_title, self._artist, round(curr_time, 3), total_time, status)
                                             
                         
