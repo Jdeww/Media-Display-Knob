@@ -57,7 +57,19 @@ class MediaData:
                         self._curr_session = s
                         curr_session = s
                         break
-            curr_session = self._curr_session
+
+            if self._curr_session.get_playback_info().playback_status == PlaybackStatus.PAUSED:
+                curr_session = self._curr_session
+            
+            if curr_session == None:
+                for s in sessions:
+                    if s.get_playback_info().playback_status == PlaybackStatus.PAUSED:
+                        info = await s.try_get_media_properties_async()
+                        if info.title:
+                            self._curr_session = s
+                            curr_session = s
+                            break
+
         else:
             curr_session = self._curr_session
 
@@ -98,7 +110,7 @@ class MediaData:
                         self._thumbnail = thumbnail_bytes
                         
                         
-                        #self._write_log(curr_session.source_app_user_model_id, info.title, info.album_title, info.album_artist, round(curr_time, 3), total_time, status)
+                        self._write_log(curr_session.source_app_user_model_id, info.title, info.album_title, info.album_artist, round(curr_time, 3), total_time, status)
                         
                         
                         #Used only when debugging, not really much of a use in day to day
@@ -120,7 +132,7 @@ class MediaData:
                 else:
 
 
-                    #self._write_log(curr_session.source_app_user_model_id, self._title, self._album_title, self._artist, round(curr_time, 3), total_time, status)
+                    self._write_log(curr_session.source_app_user_model_id, self._title, self._album_title, self._artist, round(curr_time, 3), total_time, status)
                                             
                         
                     #Used only when debugging, not really much of a use in day to day
