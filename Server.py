@@ -7,11 +7,19 @@ async def SendData(s, x):
     last_send = 0
     errors = 0
     while True:
+        getinfo_task = None
         try:
-            data = await asyncio.wait_for(x.GetInfo(), timeout=4.0)
+            getinfo_task = asyncio.ensure_future(x.GetInfo())
+            data = await asyncio.wait_for(asyncio.shield(getinfo_task), timeout=4.0)
         except asyncio.CancelledError:
+            if getinfo_task and not getinfo_task.done():
+                getinfo_task.cancel()
+                await asyncio.gather(getinfo_task, return_exceptions=True)
             raise
         except Exception as e:
+            if getinfo_task and not getinfo_task.done():
+                getinfo_task.cancel()
+                await asyncio.gather(getinfo_task, return_exceptions=True)
             task = asyncio.current_task()
             if task and task.cancelling():
                 raise asyncio.CancelledError() from e
@@ -74,7 +82,20 @@ async def ReceiveData(s, x):
 async def handleClient(reader, writer):
     addr = writer.get_extra_info('peername')
     x = MediaData()
-    await x.initialize()
+    for attempt in range(5):
+        try:
+            await x.initialize()
+            break
+        except Exception as e:
+            if attempt == 4:
+                print(f"Failed to initialize session for {addr}: {e}")
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+                return
+            await asyncio.sleep(1.0)
     print(f"Connected by {addr}")
     send_task = asyncio.create_task(SendData(writer, x))
     recv_task = asyncio.create_task(ReceiveData(reader, x))
