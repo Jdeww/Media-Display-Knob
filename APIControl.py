@@ -1,10 +1,12 @@
 import time
+import os
 from collections import deque
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as manager
 from winsdk.windows.storage.streams import DataReader, Buffer, InputStreamOptions
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus
 import base64
 from vibrant import Vibrant
+_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class MediaData:
     def __init__(self):
@@ -16,15 +18,16 @@ class MediaData:
         self._default = None
         self._curr_session = None
         self._log = deque(maxlen=300)
-        with open("Default.jpg", "rb") as f:
+        default_path = os.path.join(_DIR, "Default.jpg")
+        with open(default_path, "rb") as f:
             self._default = f.read()
-        pallete = Vibrant().get_palette("Default.jpg")
+        pallete = Vibrant().get_palette(default_path)
         dark_muted = pallete.dark_muted
         self._default_color = list(dark_muted.rgb) if dark_muted else [0, 0, 0]
 
     def _write_log(self, origin, title, album_title, artist, curr_time, total_time, status):
         self._log.append(f"{origin} | {title} | {album_title} | {artist} | {curr_time} | {total_time} | {status}")
-        with open("media_log.txt", "w") as f:
+        with open(os.path.join(_DIR, "media_log.txt"), "w") as f:
             f.write("\n".join(self._log))
 
     async def initialize(self):
@@ -40,30 +43,44 @@ class MediaData:
         reader.read_bytes(img_bytes)
         return bytes(img_bytes)
     
+    def _safe_status(self, session):
+        #A session can become invalid (e.g. the app was closed) without ever
+        #being removed from self._curr_session, and querying it then raises.
+        #Treat that the same as "not playing" instead of letting it propagate.
+        try:
+            return session.get_playback_info().playback_status
+        except Exception:
+            return None
+
     async def GetStatus(self):
         curr_session = self._curr_session
-        if curr_session and curr_session.get_playback_info().playback_status == PlaybackStatus.PLAYING:
+        if curr_session and self._safe_status(curr_session) == PlaybackStatus.PLAYING:
             return True
         return False
 
     async def GetInfo(self):
         curr_session = None
-        if self._curr_session == None or self._curr_session.get_playback_info().playback_status != PlaybackStatus.PLAYING:
+        if self._curr_session and self._safe_status(self._curr_session) is None:
+            #Underlying session is no longer valid; stop tracking it so we fall
+            #through to scanning for a new session (e.g. Chrome) below.
+            self._curr_session = None
+
+        if self._curr_session == None or self._safe_status(self._curr_session) != PlaybackStatus.PLAYING:
             sessions = self._session.get_sessions()
             for s in sessions:
-                if s.get_playback_info().playback_status == PlaybackStatus.PLAYING:
+                if self._safe_status(s) == PlaybackStatus.PLAYING:
                     info = await s.try_get_media_properties_async()
                     if info.title:
                         self._curr_session = s
                         curr_session = s
                         break
 
-            if self._curr_session.get_playback_info().playback_status == PlaybackStatus.PAUSED:
+            if self._curr_session and self._safe_status(self._curr_session) == PlaybackStatus.PAUSED:
                 curr_session = self._curr_session
-            
+
             if curr_session == None:
                 for s in sessions:
-                    if s.get_playback_info().playback_status == PlaybackStatus.PAUSED:
+                    if self._safe_status(s) == PlaybackStatus.PAUSED:
                         info = await s.try_get_media_properties_async()
                         if info.title:
                             self._curr_session = s
@@ -97,9 +114,10 @@ class MediaData:
                 if info.title != self._title or info.album_artist != self._artist or info.album_title != self._album_title:
                     if info.thumbnail:
                         thumbnail_bytes = await self.get_thumbnail_bytes(info.thumbnail)
-                        with open("Thumbnail.jpg", "wb") as f:
+                        thumbnail_path = os.path.join(_DIR, "Thumbnail.jpg")
+                        with open(thumbnail_path, "wb") as f:
                             f.write(thumbnail_bytes)
-                        palette = Vibrant().get_palette("Thumbnail.jpg")
+                        palette = Vibrant().get_palette(thumbnail_path)
                         dark_muted = palette.dark_muted
                         color = list(dark_muted.rgb) if dark_muted else [0, 0, 0]
 
@@ -166,16 +184,19 @@ class MediaData:
     async def Change(self, val):
         curr_session = self._curr_session
         if curr_session:
-            if val == 1:
-                await curr_session.try_skip_next_async()
-            elif val == 2:
-                await curr_session.try_skip_previous_async()
-            else:
-                status = await self.GetStatus()
-                await curr_session.try_toggle_play_pause_async() 
-                next = await self.GetStatus()
-                if next == status:
-                    if not status:
-                        await curr_session.try_pause_async()
-                    else:
-                        await curr_session.try_toggle_play_pause_async() 
+            try:
+                if val == 1:
+                    await curr_session.try_skip_next_async()
+                elif val == 2:
+                    await curr_session.try_skip_previous_async()
+                else:
+                    status = await self.GetStatus()
+                    await curr_session.try_toggle_play_pause_async()
+                    next = await self.GetStatus()
+                    if next == status:
+                        if not status:
+                            await curr_session.try_pause_async()
+                        else:
+                            await curr_session.try_toggle_play_pause_async()
+            except Exception as e:
+                print(f"[Change] Error: {e}")
