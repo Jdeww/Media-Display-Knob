@@ -1,26 +1,31 @@
 import asyncio
 import json
-import base64
 from PiInterface import Interface
 from PiScreen import Screen
+from MediaState import MediaState, MediaMessageType, write_frame
 
 async def read(reader, screen):
     while True:
-        line = await asyncio.wait_for(reader.readline(), timeout=5.0)
-        if not line:
-            raise ConnectionResetError("Server closed connection")
-        data = json.loads(line)
-        if len(data) == 1 and data[0] == "idle":
+        state = await asyncio.wait_for(MediaState.read_from(reader), timeout=5.0)
+        if state.get_type() == MediaMessageType.IDLE:
             screen.set_idle()
-        elif len(data) == 9:
-            print(data[0:4], data[5:])
-            if str(data[0]).startswith("Spotify"):
-                thumbnail_bytes = base64.b64decode(data[4])
+        elif state.get_type() == MediaMessageType.FULL:
+            print(state.get_source(), state.get_title(), state.get_artist())
+            if state.get_source().startswith("Spotify"):
+                thumbnail_bytes = state.get_thumbnail()
             else:
                 thumbnail_bytes = open("Default.jpg", "rb").read()
-            screen.update(data[1], data[2], data[5], data[6], data[7], thumbnail_bytes, data[8])
-        elif len(data) == 3:
-            screen.update_time(data[0], data[1], data[2])
+            screen.update(
+                state.get_title(),
+                state.get_artist(),
+                state.get_position(),
+                state.get_duration(),
+                state.get_playing(),
+                thumbnail_bytes,
+                state.get_color(),
+            )
+        elif state.get_type() == MediaMessageType.TIME_UPDATE:
+            screen.update_time(state.get_position(), state.get_duration(), state.get_playing())
 
 async def write(writer, n):
     scroll_task = asyncio.create_task(n.scroll())
@@ -32,9 +37,7 @@ async def write(writer, n):
                 return_when=asyncio.FIRST_COMPLETED
             )
             for task in done:
-                msg = json.dumps(task.result()) + "\n"
-                writer.write(msg.encode())
-                await writer.drain()
+                await write_frame(writer, json.dumps(task.result()).encode())
                 if task is scroll_task:
                     scroll_task = asyncio.create_task(n.scroll())
                 else:
@@ -52,7 +55,10 @@ async def main():
             read_task = None
             write_task = None
             try:
-                reader, writer = await asyncio.open_connection('Jdew.local', 12345, limit=4*1024*1024)
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection('Jdew.local', 12345, limit=4*1024*1024),
+                    timeout=5.0,
+                )
                 print("Connected")
                 read_task = asyncio.create_task(read(reader, s))
                 write_task = asyncio.create_task(write(writer, n))

@@ -4,8 +4,8 @@ from collections import deque
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as manager
 from winsdk.windows.storage.streams import DataReader, Buffer, InputStreamOptions
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus
-import base64
 from vibrant import Vibrant
+from MediaState import MediaState, MediaMessageType
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
 class MediaData:
@@ -15,15 +15,8 @@ class MediaData:
         self._artist = None
         self._thumbnail = None
         self._background_color = None
-        self._default = None
         self._curr_session = None
         self._log = deque(maxlen=300)
-        default_path = os.path.join(_DIR, "Default.jpg")
-        with open(default_path, "rb") as f:
-            self._default = f.read()
-        pallete = Vibrant().get_palette(default_path)
-        dark_muted = pallete.dark_muted
-        self._default_color = list(dark_muted.rgb) if dark_muted else [0, 0, 0]
 
     def _write_log(self, origin, title, album_title, artist, curr_time, total_time, status):
         self._log.append(f"{origin} | {title} | {album_title} | {artist} | {curr_time} | {total_time} | {status}")
@@ -129,57 +122,51 @@ class MediaData:
                         
                         
                         self._write_log(curr_session.source_app_user_model_id, info.title, info.album_title, info.album_artist, round(curr_time, 3), total_time, status)
-                        
-                        
+
+
                         #Used only when debugging, not really much of a use in day to day
-                        
-                        
-                        return[
-                                curr_session.source_app_user_model_id,
-                                info.title,
-                                info.album_artist,
-                                info.album_title,
-                                base64.b64encode(thumbnail_bytes).decode(),
-                                round(curr_time, 3),
-                                total_time,
-                                status,
-                                color
-                            ]
+
+
+                        return (
+                            MediaState()
+                            .set_type(MediaMessageType.FULL)
+                            .set_source(curr_session.source_app_user_model_id)
+                            .set_title(info.title)
+                            .set_artist(info.album_artist)
+                            .set_album(info.album_title)
+                            .set_thumbnail(thumbnail_bytes)
+                            .set_position(round(curr_time, 3))
+                            .set_duration(total_time)
+                            .set_playing(status)
+                            .set_color(tuple(color))
+                        )
                     #Check if the media has a thumbnail and if it does, get the raw bytes of the thumbnail
                     #With the dark muted color for the background
                 else:
 
 
                     self._write_log(curr_session.source_app_user_model_id, self._title, self._album_title, self._artist, round(curr_time, 3), total_time, status)
-                                            
-                        
+
+
                     #Used only when debugging, not really much of a use in day to day
-                        
-                        
-                    return[
-                        curr_session.source_app_user_model_id,
-                        self._title,
-                        self._artist,
-                        self._album_title,
-                        base64.b64encode(self._thumbnail).decode(),
-                        round(curr_time, 3),
-                        total_time,
-                        status,
-                        self._background_color
-                    ]
+
+
+                    return (
+                        MediaState()
+                        .set_type(MediaMessageType.FULL)
+                        .set_source(curr_session.source_app_user_model_id)
+                        .set_title(self._title)
+                        .set_artist(self._artist)
+                        .set_album(self._album_title)
+                        .set_thumbnail(self._thumbnail)
+                        .set_position(round(curr_time, 3))
+                        .set_duration(total_time)
+                        .set_playing(status)
+                        .set_color(tuple(self._background_color))
+                    )
 
         self._write_log("--", "--", "--", "--", 0.00, 0.00, None)
-        return [
-            "nothing",
-            "--",
-            "--",
-            "--",
-            base64.b64encode(self._default).decode(),
-            0.00,
-            0.00,
-            None,
-            self._default_color
-        ]
+        return MediaState.make_idle()
     
     async def Change(self, val):
         curr_session = self._curr_session

@@ -1,16 +1,17 @@
 import asyncio
-from APIControl import MediaData
 import json
+from APIControl import MediaData
+from MediaState import MediaState, MediaMessageType, read_frame
 
 async def SendData(s, x):
-    m = [0,0,0,0,0,0,0,0,0]
+    m = MediaState()
     last_send = 0
     errors = 0
     while True:
         getinfo_task = None
         try:
             getinfo_task = asyncio.ensure_future(x.GetInfo())
-            data = await asyncio.wait_for(asyncio.shield(getinfo_task), timeout=4.0)
+            state = await asyncio.wait_for(asyncio.shield(getinfo_task), timeout=4.0)
         except asyncio.CancelledError:
             if getinfo_task and not getinfo_task.done():
                 getinfo_task.cancel()
@@ -34,8 +35,7 @@ async def SendData(s, x):
             now = asyncio.get_running_loop().time()
             if now - last_send >= 3.0:
                 try:
-                    s.write((json.dumps(["idle"]) + "\n").encode())
-                    await s.drain()
+                    await MediaState.make_idle().write_to(s)
                     last_send = now
                 except Exception:
                     pass
@@ -43,41 +43,29 @@ async def SendData(s, x):
             continue
         errors = 0
         now = asyncio.get_running_loop().time()
-        if data[0] == "nothing":
-            s.write((json.dumps(["idle"]) + "\n").encode())
-            await s.drain()
-            m = data
+        if state.get_type() == MediaMessageType.IDLE:
+            await state.write_to(s)
+            m = state
             last_send = now
             await asyncio.sleep(0.8)
-        elif data[1] != m[1]:
-            s.write((json.dumps(data) + "\n").encode())
-            await s.drain()
-            m = data
+        elif state.get_title() != m.get_title():
+            await state.write_to(s)
+            m = state
             last_send = now
-        elif data[5:8] != m[5:8] or now - last_send >= 2.0:
-            s.write((json.dumps(data[5:8]) + "\n").encode())
-            await s.drain()
-            m = data
+        elif (state.get_position(), state.get_duration(), state.get_playing()) != (m.get_position(), m.get_duration(), m.get_playing()) or now - last_send >= 2.0:
+            await MediaState.make_time_update(state.get_position(), state.get_duration(), state.get_playing()).write_to(s)
+            m = state
             last_send = now
         await asyncio.sleep(0.2)
 
 async def ReceiveData(s, x):
     while True:
-        data = ""
-        while True:
-            chunk = await s.read(1024)
-            if not chunk:
-                raise ConnectionResetError("Client disconnected")
-            data += chunk.decode()
-            if len(data) > 4096:
-                raise ValueError("Receive buffer overflow")
-            if "\n" in data:
-                break
+        payload = await read_frame(s)
         try:
-            data = json.loads(data[:data.index("\n")])
+            val = json.loads(payload)
         except json.JSONDecodeError:
             continue
-        await x.Change(data)
+        await x.Change(val)
 
 async def handleClient(reader, writer):
     addr = writer.get_extra_info('peername')
